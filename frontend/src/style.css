@@ -10,3 +10,8 @@ body{min-width:0}
 .auth-shell{min-height:100vh;min-height:100dvh}
 @media(max-width:340px){.auth-shell{padding:66px 12px 42px}.auth-card{padding:25px 17px 21px}.topbar{padding-inline:12px}.top-actions{gap:9px}.welcome{padding-inline:15px}.welcome h1{font-size:34px}.section-heading h2{font-size:20px}.list-item-btn{padding:8px}.item-image{height:100px}.item-info{padding:8px 6px}.owner-row{display:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+.small-action{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #dfe5d8;border-radius:8px;background:rgba(255,255,255,.78);color:#536b4d;padding:7px 10px;font-size:11px;font-weight:600;white-space:nowrap}
+.small-action:hover{background:#edf2e7}
+.small-action:disabled{opacity:.6;cursor:wait}
+.danger-action{color:#9b5c47;border-color:#ead8d0}
+.danger-action:hover{background:#fbefea}

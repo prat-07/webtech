@@ -19,9 +19,9 @@ import java.util.*;
 public class ApiController {
     private static final Set<String> CATEGORIES=Set.of("Books","Electronics","Study","Sports","Arts","Music");
     private final ListingRepository listings; private final LoanRequestRepository loans; private final LoanService loanService;
-    private final CampusUserRepository users; private final ReviewRepository reviews; private final SavedListingRepository saved;
+    private final CampusUserRepository users; private final ReviewRepository reviews;
     private final NotificationRepository notifications;
-    public ApiController(ListingRepository listings,LoanRequestRepository loans,LoanService loanService,CampusUserRepository users,ReviewRepository reviews,SavedListingRepository saved,NotificationRepository notifications){this.listings=listings;this.loans=loans;this.loanService=loanService;this.users=users;this.reviews=reviews;this.saved=saved;this.notifications=notifications;}
+    public ApiController(ListingRepository listings,LoanRequestRepository loans,LoanService loanService,CampusUserRepository users,ReviewRepository reviews,NotificationRepository notifications){this.listings=listings;this.loans=loans;this.loanService=loanService;this.users=users;this.reviews=reviews;this.notifications=notifications;}
     public record ListingInput(@NotBlank @Size(max=180) String title,@NotBlank @Size(max=2000) String description,@NotBlank @Size(max=80) String category,@Size(max=2048) @Pattern(regexp="https://.+",message="Image URL must use HTTPS") String imageUrl){}
     public record RequestInput(@NotNull java.time.LocalDate startDate,@NotNull java.time.LocalDate returnDate){}
     public record DecisionInput(@NotNull Boolean approve){}
@@ -59,16 +59,9 @@ public class ApiController {
     @PostMapping("/requests/{id}/cancel") @ResponseStatus(HttpStatus.NO_CONTENT)
     public void cancel(@PathVariable Long id,@AuthenticationPrincipal CampusPrincipal user){loanService.cancel(id,user.id());}
 
-    @GetMapping("/me/saved") @Transactional(readOnly=true)
-    public List<ApiModels.ListingResponse> savedListings(@AuthenticationPrincipal CampusPrincipal user){return saved.findByUserId(user.id()).stream().map(s->listings.findById(s.listingId).orElse(null)).filter(Objects::nonNull).filter(l->l.status==Listing.Status.ACTIVE&&l.campus.equals(user.campus())).map(this::listingResponse).toList();}
-    @PutMapping("/me/saved/{listingId}") @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void saveListing(@PathVariable Long listingId,@AuthenticationPrincipal CampusPrincipal user){Listing l=listingInCampus(listingId,user.campus());if(l.status!=Listing.Status.ACTIVE)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Listing unavailable");saved.save(new SavedListing(user.id(),listingId));}
-    @DeleteMapping("/me/saved/{listingId}") @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void unsaveListing(@PathVariable Long listingId,@AuthenticationPrincipal CampusPrincipal user){saved.deleteByUserIdAndListingId(user.id(),listingId);}
-
     @GetMapping("/me/notifications") @Transactional(readOnly=true)
     public List<ApiModels.NotificationResponse> notifications(@AuthenticationPrincipal CampusPrincipal user){return notifications.findByUserIdOrderByCreatedAtDesc(user.id()).stream().map(ApiModels.NotificationResponse::from).toList();}
-    @PostMapping("/me/notifications/read-all") @Transactional
+    @PostMapping("/me/notifications/read-all") @ResponseStatus(HttpStatus.NO_CONTENT) @Transactional
     public void readNotifications(@AuthenticationPrincipal CampusPrincipal user){notifications.findByUserIdOrderByCreatedAtDesc(user.id()).forEach(n->{n.read=true;notifications.save(n);});}
     @PostMapping("/requests/{id}/review") @ResponseStatus(HttpStatus.CREATED) @Transactional
     public ApiModels.ReviewResponse review(@PathVariable Long id,@AuthenticationPrincipal CampusPrincipal user,@Valid @RequestBody ApiModels.ReviewInput in){LoanRequest r=loans.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Request not found"));if(!r.borrowerId.equals(user.id()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Only the borrower can review this loan");if(r.status!=LoanRequest.Status.RETURNED)throw new ResponseStatusException(HttpStatus.CONFLICT,"Reviews are available after the item is returned");if(reviews.existsByLoanRequestId(id))throw new ResponseStatusException(HttpStatus.CONFLICT,"This loan has already been reviewed");Listing l=listings.findById(r.listingId).orElseThrow();Review savedReview=reviews.save(new Review(id,user.id(),l.ownerId,in.rating(),in.comment()==null?null:in.comment().trim()));return new ApiModels.ReviewResponse(savedReview.id,savedReview.rating,savedReview.comment,savedReview.createdAt);}
