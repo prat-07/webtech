@@ -1,0 +1,15 @@
+node_modules/
+frontend/dist/
+backend/target/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+*.iml
+.DS_Store
+*.log
+coverage/
+playwright-report/
+test-results/

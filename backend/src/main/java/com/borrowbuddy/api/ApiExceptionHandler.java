@@ -1,0 +1,7 @@
+package com.borrowbuddy.api;
+import org.springframework.dao.DataIntegrityViolationException; import org.springframework.http.*; import org.springframework.validation.FieldError; import org.springframework.web.bind.MethodArgumentNotValidException; import org.springframework.web.bind.annotation.*; import org.springframework.web.context.request.WebRequest; import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler; import java.util.*; import java.util.stream.Collectors;
+@RestControllerAdvice
+public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
+ @Override protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,HttpHeaders headers,HttpStatusCode status,WebRequest request){ProblemDetail pd=ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,"Please correct the highlighted fields.");pd.setProperty("code","VALIDATION_FAILED");pd.setProperty("errors",ex.getBindingResult().getFieldErrors().stream().collect(Collectors.toMap(FieldError::getField,e->Objects.requireNonNullElse(e.getDefaultMessage(),"Invalid value"),(a,b)->a)));return handleExceptionInternal(ex,pd,headers,HttpStatus.BAD_REQUEST,request);}
+ @ExceptionHandler(DataIntegrityViolationException.class) ResponseEntity<ProblemDetail> integrity(DataIntegrityViolationException ex){ProblemDetail pd=ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,"That conflicts with existing data.");pd.setProperty("code","DATA_CONFLICT");return ResponseEntity.status(HttpStatus.CONFLICT).body(pd);}
+}
