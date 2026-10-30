@@ -1,1 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"><rect width="800" height="600" fill="#e8eddf"/><circle cx="400" cy="300" r="95" fill="#d5e0c8"/><path d="M345 322h110l-12-100h-86z" fill="#839975"/><path d="M355 220c0-25 18-45 45-45s45 20 45 45" fill="none" stroke="#839975" stroke-width="12"/><text x="400" y="455" text-anchor="middle" font-family="sans-serif" font-size="22" fill="#65755b">Shared with care</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#e8eddf" />
+  <circle cx="400" cy="300" r="95" fill="#d5e0c8" />
+  <path d="M345 322h110l-12-100h-86z" fill="#839975" />
+  <path
+    d="M355 220c0-25 18-45 45-45s45 20 45 45"
+    fill="none"
+    stroke="#839975"
+    stroke-width="12"
+  />
+  <text
+    x="400"
+    y="455"
+    text-anchor="middle"
+    font-family="sans-serif"
+    font-size="22"
+    fill="#65755b"
+  >
+    Shared with care
+  </text>
+</svg>

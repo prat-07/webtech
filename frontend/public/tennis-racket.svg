@@ -1,9 +1,85 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
-<title id="title">Tennis racket</title><desc id="desc">A simple green tennis racket on a soft background</desc>
-<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#f2f4e9"/><stop offset="1" stop-color="#dfe8d4"/></linearGradient><linearGradient id="frame" x2="1"><stop stop-color="#58734d"/><stop offset="1" stop-color="#829a6d"/></linearGradient><filter id="shadow" x="-.3" y="-.3" width="1.6" height="1.6"><feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#3d5138" flood-opacity=".18"/></filter></defs>
-<rect width="800" height="600" rx="32" fill="url(#bg)"/><circle cx="400" cy="286" r="202" fill="#fff" opacity=".3"/>
-<g transform="rotate(34 400 300)" filter="url(#shadow)"><ellipse cx="400" cy="235" rx="96" ry="139" fill="#eef2e7" stroke="url(#frame)" stroke-width="20"/><ellipse cx="400" cy="235" rx="78" ry="120" fill="none" stroke="#a7b599" stroke-width="2"/>
-<g stroke="#a7b599" stroke-width="2" opacity=".88"><path d="M400 118v234M370 120v230M430 120v230M345 130v210M455 130v210M330 155v160M470 155v160"/><path d="M321 170h158M310 198h180M307 226h186M310 254h180M321 282h158M340 310h120"/></g>
-<path d="M382 367h36l15 146q-33 22-66 0z" fill="#607b52"/><path d="M386 382h28M389 407h22M392 432h16M395 457h10M397 482h6" stroke="#d6e1ca" stroke-width="3" stroke-linecap="round"/><path d="M372 506q28 19 56 0l5 31q-32 26-66 0z" fill="#a5b88e"/></g>
-<circle cx="644" cy="130" r="30" fill="#d7e36f"/><path d="M628 108q27 18 32 42m-44-31q24 16 31 39" fill="none" stroke="#f8f9e7" stroke-width="4" stroke-linecap="round"/>
-<text x="400" y="566" text-anchor="middle" font-family="sans-serif" font-size="19" letter-spacing="3" fill="#63735c">READY TO PLAY</text></svg>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 800 600"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Tennis racket</title>
+  <desc id="desc">A simple green tennis racket on a soft background</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1">
+      <stop stop-color="#f2f4e9" />
+      <stop offset="1" stop-color="#dfe8d4" />
+    </linearGradient>
+    <linearGradient id="frame" x2="1">
+      <stop stop-color="#58734d" />
+      <stop offset="1" stop-color="#829a6d" />
+    </linearGradient>
+    <filter id="shadow" x="-.3" y="-.3" width="1.6" height="1.6">
+      <feDropShadow
+        dx="0"
+        dy="14"
+        stdDeviation="12"
+        flood-color="#3d5138"
+        flood-opacity=".18"
+      />
+    </filter>
+  </defs>
+  <rect width="800" height="600" rx="32" fill="url(#bg)" />
+  <circle cx="400" cy="286" r="202" fill="#fff" opacity=".3" />
+  <g transform="rotate(34 400 300)" filter="url(#shadow)">
+    <ellipse
+      cx="400"
+      cy="235"
+      rx="96"
+      ry="139"
+      fill="#eef2e7"
+      stroke="url(#frame)"
+      stroke-width="20"
+    />
+    <ellipse
+      cx="400"
+      cy="235"
+      rx="78"
+      ry="120"
+      fill="none"
+      stroke="#a7b599"
+      stroke-width="2"
+    />
+    <g stroke="#a7b599" stroke-width="2" opacity=".88">
+      <path
+        d="M400 118v234M370 120v230M430 120v230M345 130v210M455 130v210M330 155v160M470 155v160"
+      />
+      <path
+        d="M321 170h158M310 198h180M307 226h186M310 254h180M321 282h158M340 310h120"
+      />
+    </g>
+    <path d="M382 367h36l15 146q-33 22-66 0z" fill="#607b52" />
+    <path
+      d="M386 382h28M389 407h22M392 432h16M395 457h10M397 482h6"
+      stroke="#d6e1ca"
+      stroke-width="3"
+      stroke-linecap="round"
+    />
+    <path d="M372 506q28 19 56 0l5 31q-32 26-66 0z" fill="#a5b88e" />
+  </g>
+  <circle cx="644" cy="130" r="30" fill="#d7e36f" />
+  <path
+    d="M628 108q27 18 32 42m-44-31q24 16 31 39"
+    fill="none"
+    stroke="#f8f9e7"
+    stroke-width="4"
+    stroke-linecap="round"
+  />
+  <text
+    x="400"
+    y="566"
+    text-anchor="middle"
+    font-family="sans-serif"
+    font-size="19"
+    letter-spacing="3"
+    fill="#63735c"
+  >
+    READY TO PLAY
+  </text>
+</svg>

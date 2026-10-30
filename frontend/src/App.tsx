@@ -1,46 +1,1299 @@
-import {useEffect,useMemo,useState, type FormEvent} from 'react';
-import {api,ApiError} from './api';
-import {Search,Plus,Grid2X2,Package,Clock3,ArrowUpRight,MapPin,Star,Check, X, Bell, BookOpen, Laptop, Dumbbell, Camera, Sparkles, Menu, CalendarDays, CircleCheck, ArrowRight, HandHeart, Trash2} from 'lucide-react';
-type Listing={id:number;name:string;category:string;owner:string;initials:string;rating:number;ratingCount:number;distance:string;image:string;price:string;available:boolean;description:string};
-const cats=[['All items',Grid2X2],['Books',BookOpen],['Electronics',Laptop],['Study',Sparkles],['Sports',Dumbbell],['Arts & music',Camera]] as const;
-type Loan={id:number;listingId:number;listingTitle:string;borrowerId:number;borrowerName:string;startDate:string;returnDate:string;status:string;createdAt:string};
-type ListingPage={content:any[];page:number;size:number;totalElements:number;totalPages:number};
-type Notice={id:number;message:string;read:boolean;createdAt:string;loanRequestId:number|null};
-const localDate=(plusDays=0)=>{const d=new Date();d.setDate(d.getDate()+plusDays);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)};
-const mapListing=(x:any):Listing=>({id:x.id,name:x.title,category:x.category,owner:x.ownerName,initials:(x.ownerName||'').split(/\s+/).map((n:string)=>n[0]).join('').slice(0,2).toUpperCase(),rating:x.ownerRating??0,ratingCount:x.ratingCount??0,distance:x.campus||'Your campus',image:x.imageUrl||'/item-placeholder.svg',price:'Free to borrow',available:x.status==='ACTIVE',description:x.description});
-const mapLoan=(x:any):Loan=>({id:x.id,listingId:x.listingId,listingTitle:x.listingTitle,borrowerId:x.borrowerId,borrowerName:x.borrowerName,startDate:x.startDate,returnDate:x.returnDate,status:x.status,createdAt:x.createdAt});
-export default function App(){
- const[items,setItems]=useState<Listing[]>([]),[myListings,setMyListings]=useState<Listing[]>([]),[category,setCategory]=useState('All items'),[query,setQuery]=useState(''),[tab,setTab]=useState('Discover'),[modal,setModal]=useState<Listing|null|boolean>(null),[requests,setRequests]=useState<Loan[]>([]),[incoming,setIncoming]=useState<Loan[]>([]),[notifications,setNotifications]=useState<Notice[]>([]),[toast,setToast]=useState(''),[mobile,setMobile]=useState(false),[authPage,setAuthPage]=useState(location.pathname==='/login'||location.pathname==='/signup'),[authMode,setAuthMode]=useState<'login'|'signup'>(location.pathname==='/signup'?'signup':'login'),[returnTo,setReturnTo]=useState(new URLSearchParams(location.search).get('returnTo')||'/'),[sessionReady,setSessionReady]=useState(false),[account,setAccount]=useState<any>(null),[authError,setAuthError]=useState(''),[authBusy,setAuthBusy]=useState(false),[authExpired,setAuthExpired]=useState(false),[requestStart,setRequestStart]=useState(localDate(1)),[requestEnd,setRequestEnd]=useState(localDate(2)),[requestError,setRequestError]=useState(''),[actionBusy,setActionBusy]=useState(false),[dataError,setDataError]=useState(''),[reloadListings,setReloadListings]=useState(0);
- useEffect(()=>{let alive=true;api<any>('/auth/me').then(u=>{if(!alive)return;setAccount(u);if(location.pathname==='/login'||location.pathname==='/signup')setAuthPage(false)}).catch(e=>{if(!alive)return;setAccount(null);setAuthPage(true);setAuthMode(location.pathname==='/signup'?'signup':'login');if(e instanceof ApiError&&e.status!==401)setAuthError(e.message);if(location.pathname!=='/login'&&location.pathname!=='/signup'){setReturnTo('/');history.replaceState({},'',`/login?returnTo=${encodeURIComponent('/')}`)}}).finally(()=>alive&&setSessionReady(true));return()=>{alive=false}},[]);
- useEffect(()=>{const expired=()=>{setAccount(null);setAuthPage(true);setAuthMode('login');setAuthExpired(true);history.replaceState({},'',`/login?returnTo=${encodeURIComponent(location.pathname)}`)};window.addEventListener('auth:expired',expired);return()=>window.removeEventListener('auth:expired',expired)},[]);
- useEffect(()=>{if(!account)return;let alive=true;Promise.all([api<any[]>('/me/requests'),api<any[]>('/me/listings'),api<any[]>('/me/listings/requests'),api<Notice[]>('/me/notifications')]).then(([reqs,own,incomingReqs,notices])=>{if(!alive)return;setRequests(reqs.map(mapLoan));setMyListings(own.map(mapListing));setIncoming(incomingReqs.map(mapLoan));setNotifications(notices)}).catch(e=>alive&&setDataError(e instanceof Error?e.message:'Unable to load your campus data.')).finally(()=>{});return()=>{alive=false}},[account]);
- useEffect(()=>{if(!account)return;const ctrl=new AbortController();const timer=window.setTimeout(()=>{const p=new URLSearchParams({page:'0',size:'50'});if(query.trim())p.set('q',query.trim());if(category!=='All items')for(const c of category==='Arts & music'?['Arts','Music']:[category]){const url=new URLSearchParams(p);url.set('category',c);api<ListingPage>(`/listings?${url.toString()}`,{signal:ctrl.signal}).then(r=>setItems(prev=>{const fresh=r.content.map(mapListing);return category==='Arts & music'?Array.from(new Map([...prev.filter(i=>!['Arts','Music'].includes(i.category)),...fresh].map(i=>[i.id,i])).values()):fresh})).catch(e=>{if(!ctrl.signal.aborted)setDataError(e.message)});return;}api<ListingPage>(`/listings?${p.toString()}`,{signal:ctrl.signal}).then(r=>setItems(r.content.map(mapListing))).catch(e=>{if(!ctrl.signal.aborted)setDataError(e.message)});},300);return()=>{clearTimeout(timer);ctrl.abort()}},[account,query,category,reloadListings]);
- function goAuth(destination:string){if(account){setTab(destination);return}setReturnTo(destination);setAuthMode('login');setAuthError('');setAuthPage(true);history.pushState({},'',`/login?returnTo=${encodeURIComponent(destination)}`)}
- async function submitAuth(e:FormEvent<HTMLFormElement>){e.preventDefault();setAuthError('');setAuthBusy(true);const data=new FormData(e.currentTarget);try{if(authMode==='signup'){await api('/auth/register',{method:'POST',body:JSON.stringify({name:data.get('name'),email:data.get('email'),password:data.get('password'),campus:data.get('campus')})});setAuthMode('login');history.replaceState({},'',`/login?returnTo=${encodeURIComponent(returnTo)}`);setAuthError('Account created. Sign in to continue.');return}await api('/auth/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({email:String(data.get('email')),password:String(data.get('password'))}).toString()});const me=await api<any>('/auth/me');setAccount(me);setAuthPage(false);history.replaceState({},'', '/');const destination=returnTo==='/'||returnTo==='/login'?'Discover':returnTo;setTab(destination)}catch(err){setAuthError(err instanceof Error?err.message:'Something went wrong. Try again.')}finally{setAuthBusy(false)}}
- async function logout(){try{await api('/auth/logout',{method:'POST'});setAccount(null);setSessionReady(true);setAuthMode('login');setAuthPage(true);setRequests([]);setIncoming([]);history.replaceState({},'', '/login')}catch(e){flash(e instanceof Error?e.message:'Could not sign out')}}
- function flash(s:string){setToast(s);window.setTimeout(()=>setToast(''),3000)}
- function viewListing(item:Listing){setRequestStart(localDate(1));setRequestEnd(localDate(2));setRequestError('');setModal(item)}
- async function request(item:Listing){if(!account){setModal(item);goAuth('Discover');return}if(!requestStart||!requestEnd||requestEnd<=requestStart){setRequestError('Choose a return date after the start date.');return}setActionBusy(true);setRequestError('');try{const savedReq=await api<any>(`/listings/${item.id}/requests`,{method:'POST',body:JSON.stringify({startDate:requestStart,returnDate:requestEnd})});setRequests(prev=>[mapLoan(savedReq),...prev]);setModal(null);flash('Borrow request sent.')}catch(e){setRequestError(e instanceof Error?e.message:'Could not send your request.')}finally{setActionBusy(false)}}
- async function createListing(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);const body={title:String(f.get('name')).trim(),category:String(f.get('category')),description:String(f.get('description')||'A useful item shared with the campus community.').trim(),imageUrl:String(f.get('imageUrl')||'').trim()||null};if(!body.title){flash('Add an item name.');return}setActionBusy(true);try{const created=await api<any>('/listings',{method:'POST',body:JSON.stringify(body)});const item=mapListing(created);setMyListings(prev=>[item,...prev]);setModal(null);setTab('My listings');flash('Your listing is live.')}catch(e){flash(e instanceof Error?e.message:'Could not publish listing.')}finally{setActionBusy(false)}}
- async function deleteListing(item:Listing){setActionBusy(true);try{await api(`/listings/${item.id}`,{method:'DELETE'});setMyListings(prev=>prev.filter(x=>x.id!==item.id));setItems(prev=>prev.filter(x=>x.id!==item.id));flash('Listing deleted.')}catch(e){flash(e instanceof Error?e.message:'Could not delete listing.')}finally{setActionBusy(false)}}
- async function decideLoan(id:number,approve:boolean){setActionBusy(true);try{const result=await api<any>(`/requests/${id}/decision`,{method:'POST',body:JSON.stringify({approve})});setIncoming(prev=>prev.map(x=>x.id===id?mapLoan(result):x));flash(approve?'Request approved.':'Request declined.')}catch(e){flash(e instanceof Error?e.message:'Could not update request.')}finally{setActionBusy(false)}}
- async function transitionLoan(id:number,status:string){setActionBusy(true);try{const result=await api<any>(`/requests/${id}/transition`,{method:'POST',body:JSON.stringify({status})});const loan=mapLoan(result);setIncoming(prev=>prev.map(x=>x.id===id?loan:x));setRequests(prev=>prev.map(x=>x.id===id?loan:x));flash('Loan status updated.')}catch(e){flash(e instanceof Error?e.message:'Could not update loan.')}finally{setActionBusy(false)}}
- async function cancelLoan(id:number){setActionBusy(true);try{await api(`/requests/${id}/cancel`,{method:'POST'});setRequests(prev=>prev.map(x=>x.id===id?{...x,status:'CANCELLED'}:x));flash('Request cancelled.')}catch(e){flash(e instanceof Error?e.message:'Could not cancel request.')}finally{setActionBusy(false)}}
- async function readAllNotifications(){try{await api('/me/notifications/read-all',{method:'POST'});setNotifications(prev=>prev.map(n=>({...n,read:true})));}catch(e){flash(e instanceof Error?e.message:'Could not update notifications')}}
- const filtered=useMemo(()=>items.filter(i=>(category==='All items'||(category==='Arts & music'?['Arts','Music'].includes(i.category):i.category===category))&&(i.name.toLowerCase().includes(query.toLowerCase())||i.category.toLowerCase().includes(query.toLowerCase())||i.owner.toLowerCase().includes(query.toLowerCase()))),[items,category,query]);
- if(!sessionReady)return <div className="auth-shell" role="status" aria-live="polite"><span className="auth-caption">Preparing your campus community…</span></div>;
- if(!account||authPage)return <main className="auth-shell"><div className="auth-backdrop" aria-hidden="true"><span className="auth-orbit"/><span className="auth-orbit auth-orbit-b"/><span className="auth-spark">✳</span></div><a className="brand auth-brand" href="/login" onClick={e=>{e.preventDefault();setAuthMode('login')}}><span className="brand-mark"><HandHeart size={18}/></span>borrowbuddy<span className="brand-dot">.</span></a><section className="auth-card" aria-labelledby="auth-title"><span className="eyebrow muted">YOUR CAMPUS, SHARED</span><h1 id="auth-title">{authMode==='login'?'Good to have you back.':'Make room to share.'}</h1><p>{authMode==='login'?'Sign in to find what you need and share what you have.':'Join your campus community and start borrowing.'}</p>{authExpired&&<div className="auth-error" role="alert">Your session expired. Please sign in again.</div>}{authError&&<div className={authError==='Account created. Sign in to continue.'?'auth-success':'auth-error'} role="alert">{authError}</div>}<form onSubmit={submitAuth}>{authMode==='signup'&&<label>YOUR NAME<input name="name" autoComplete="name" maxLength={120} required/></label>}<label>EMAIL ADDRESS<input name="email" type="email" autoComplete={authMode==='login'?'username':'email'} autoCapitalize="none" spellCheck={false} maxLength={255} required/></label>{authMode==='signup'&&<label>CAMPUS<input name="campus" autoComplete="organization" maxLength={180} required/></label>}<label>PASSWORD<input name="password" type="password" autoComplete={authMode==='login'?'current-password':'new-password'} minLength={authMode==='signup'?12:undefined} maxLength={72} required/></label><button className="request-btn" type="submit" disabled={authBusy}>{authBusy?(authMode==='login'?'Signing in…':'Creating account…'):(authMode==='login'?'Sign in':'Create account')} <ArrowRight size={16}/></button></form><p className="auth-switch">{authMode==='login'?"New to BorrowBuddy?":"Already have an account?"} <button type="button" onClick={()=>{const next=authMode==='login'?'signup':'login';setAuthMode(next);setAuthError('');setAuthExpired(false);history.replaceState({},'',`/${next}?returnTo=${encodeURIComponent(returnTo)}`)}}>{authMode==='login'?'Create an account':'Sign in'}</button></p></section><span className="auth-caption">A little give. A lot of get.</span></main>;
- return <div className="app"><header className="topbar"><a className="brand" href="#"><span className="brand-mark"><HandHeart size={18}/></span>borrowbuddy<span className="brand-dot">.</span></a><nav className="topnav" aria-label="Main navigation"><button className={tab==='Discover'?'nav-active':''} onClick={()=>setTab('Discover')}>Discover</button><button className={tab==='My loans'?'nav-active':''} onClick={()=>goAuth('My loans')}>My loans {requests.length>0&&<i>{requests.length}</i>}</button><button className={tab==='My listings'?'nav-active':''} onClick={()=>goAuth('My listings')}>My listings</button></nav><div className="top-actions"><button className="icon-btn notification" onClick={()=>goAuth('Notifications')} aria-label={`Notifications${notifications.filter(n=>!n.read).length?`, ${notifications.filter(n=>!n.read).length} unread`:""}`}><Bell size={18}/>{notifications.some(n=>!n.read)&&<b/>}</button><button className="avatar me" onClick={logout} aria-label="Sign out" title={`Sign out ${account?.name||''}`}>{account?.name?.[0]?.toUpperCase()||'A'}</button><button className="mobile-menu icon-btn" onClick={()=>setMobile(!mobile)} aria-label="Toggle navigation" aria-expanded={mobile} aria-controls="mobile-nav"><Menu size={20}/></button></div></header>
-{mobile&&<div className="mobile-nav" id="mobile-nav">{['Discover','My loans','My listings'].map(t=><button key={t} onClick={()=>{t==='Discover'?setTab(t):goAuth(t);setMobile(false)}}>{t}</button>)}</div>}
-<main><section className="welcome"><div><div className="eyebrow"><span/> YOUR CAMPUS, SHARED</div><h1>Good things<br/>go <em>around.</em></h1><p>A camera, a calculator, a good book.<br/>Borrow what you need, lend what you love.</p><div className="welcome-meta"><span className="meta-community"><HandHeart size={15}/> Open to your campus community</span><span className="meta-divider"/><MapPin size={14}/><strong> {account?.campus||'Your campus'}</strong></div></div><div className="hero-art"><div className="hero-glow"/><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-circle"><span className="sun">✳</span><div className="hero-note">A little give.<br/><b>A lot of get.</b></div><span className="hero-book">📚</span><span className="hero-coffee">☕</span><span className="hero-plant">🌱</span><div className="hero-caption">SOMEONE NEAR YOU<br/>HAS WHAT YOU NEED.</div></div><span className="floating f1">♡</span><span className="floating f2">✳</span></div></section>
-<section className="content-area"><div className="section-heading"><div><div className="eyebrow muted">THE GOOD STUFF</div><h2>{tab==='Discover'?'Find your next ':'Your '}{tab==='Discover'&&<em>borrow.</em>}{tab==='My loans'&&'loans.'}{tab==='My listings'&&'listings.'}{tab==='Notifications'&&'notifications.'}</h2></div>{tab==='My listings'&&<button className="list-item-btn" onClick={()=>setModal(true)}><Plus size={16}/> List an item</button>}</div>
-{tab!=='My loans'&&tab!=='My listings'&&tab!=='Notifications'&&<><div className="toolbar"><div className="searchbox"><Search size={18}/><input type="search" enterKeyHint="search" aria-label="Search listings" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search for anything…"/></div></div><div className="category-row">{cats.map(([name,Icon])=><button key={name} aria-pressed={category===name} onClick={()=>setCategory(name)} className={'category-chip '+(category===name?'selected':'')}><Icon size={15}/>{name}</button>)}</div><div className="results-line" aria-live="polite"><span>{filtered.length} things to borrow</span><span>All items are <b>free</b> to borrow <span className="tiny-spark">✳</span></span></div><div className="listing-grid">{filtered.map((item,n)=><article className="item-card" style={{animationDelay:`${n*55}ms`}} key={item.id}><button className="item-image" onClick={()=>viewListing(item)}><img src={item.image} alt={item.name} width="800" height="600" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={e=>{const fallback=/tennis|racket/i.test(item.name)?'/tennis-racket.svg':'/item-placeholder.svg';if(e.currentTarget.src!==new URL(fallback,location.href).href)e.currentTarget.src=fallback}}/><span className="available-pill"><i/> Available</span></button><div className="item-info"><div className="item-top"><span className="item-category">{item.category}</span><span className="rating">{item.ratingCount>0?<><Star size={12} fill="currentColor"/>{item.rating.toFixed(1)} · {item.ratingCount}</>:'New'}</span></div><button className="item-name" onClick={()=>viewListing(item)}>{item.name}</button><div className="owner-row"><span className="owner-avatar">{item.initials}</span><span>Lent by <b>{item.owner}</b></span><span className="distance"><MapPin size={12}/>{item.distance}</span></div><div className="item-bottom"><span className="free-label"><span>↗</span> Free to borrow</span><button className="arrow-btn" onClick={()=>viewListing(item)} aria-label={`View ${item.name}`}><ArrowUpRight size={17}/></button></div></div></article>)}</div>{dataError&&<div className="auth-error" role="alert">{dataError} <button type="button" onClick={()=>{setDataError('');setReloadListings(n=>n+1)}}>Retry</button></div>}{filtered.length===0&&<div className="empty-state"><Package size={28}/><b>Nothing here just yet</b><span>Try another search or explore a different category.</span></div>}<div className="see-more"><span/><button disabled>THAT’S EVERYTHING FOR NOW <span aria-hidden="true">✳</span></button><span/></div></>}
-{tab==='My loans'&&<div className="loans-panel"><div className="panel-head"><div><span className="eyebrow muted">YOUR BORROWING HISTORY</span><h3>Things in motion.</h3></div><span className="panel-count">{requests.length} requests</span></div>{requests.length?requests.map(loan=><div className="loan-row" key={loan.id}><div className="loan-icon"><Package size={18}/></div><div className="loan-name"><b>{loan.listingTitle}</b><span>{loan.startDate} → {loan.returnDate} · {loan.status.toLowerCase()}</span></div><span className="status-pending"><i/>{loan.status}</span>{['REQUESTED','APPROVED'].includes(loan.status)&&<button className="small-action" disabled={actionBusy} onClick={()=>cancelLoan(loan.id)}>Cancel</button>}<CalendarDays size={17} className="loan-calendar"/></div>):<div className="empty-state"><Clock3 size={28}/><b>No loans yet</b><span>Find something you love and send a borrow request.</span><button onClick={()=>setTab('Discover')}>Explore items <ArrowRight size={15}/></button></div>}</div>}
-{tab==='Notifications'&&<div className="loans-panel"><div className="panel-head"><div><span className="eyebrow muted">YOUR UPDATES</span><h3>Good news, when it comes.</h3></div>{notifications.some(n=>!n.read)&&<button className="small-action" onClick={readAllNotifications}>Mark all read</button>}</div>{notifications.length?notifications.map(n=><div className="loan-row" key={n.id}><div className="loan-icon"><Bell size={18}/></div><div className="loan-name"><b>{n.message}</b><span>{new Date(n.createdAt).toLocaleString()}</span></div>{!n.read&&<span className="available-pill">New</span>}</div>):<div className="empty-state"><Bell size={28}/><b>You’re all caught up</b><span>Borrow requests and return reminders will show up here.</span></div>}</div>}
-{tab==='My listings'&&<div className="loans-panel"><div className="panel-head"><div><span className="eyebrow muted">SHARE A LITTLE</span><h3>Your contributions.</h3></div></div><>{myListings.map(item=><div className="loan-row" key={item.id}><div className="loan-icon"><Package size={18}/></div><div className="loan-name"><b>{item.name}</b><span>{item.category} · {item.available?'Active':'Unavailable'}</span></div><button type="button" className="small-action danger-action" disabled={actionBusy} onClick={()=>deleteListing(item)} aria-label={`Delete ${item.name}`}><Trash2 size={15}/> Delete</button></div>)}{incoming.length>0&&<><div className="panel-head"><div><span className="eyebrow muted">BORROW REQUESTS</span><h3>Requests for your items.</h3></div></div>{incoming.map(r=><div className="loan-row" key={r.id}><div className="loan-name"><b>{r.listingTitle} · {r.borrowerName}</b><span>{r.startDate} → {r.returnDate} · {r.status}</span></div>{r.status==='REQUESTED'?<><button className="small-action" disabled={actionBusy} onClick={()=>decideLoan(r.id,true)}>Approve</button><button className="small-action" disabled={actionBusy} onClick={()=>decideLoan(r.id,false)}>Decline</button></>:r.status==='APPROVED'?<button className="small-action" disabled={actionBusy} onClick={()=>transitionLoan(r.id,'BORROWED')}>Confirm handover</button>:r.status==='BORROWED'?<button className="small-action" disabled={actionBusy} onClick={()=>transitionLoan(r.id,'RETURNED')}>Confirm return</button>:null}</div>)}</>}{!myListings.length&&!incoming.length&&<div className="empty-state"><HandHeart size={28}/><b>Nothing listed yet</b><span>Got something useful sitting around? Someone nearby could use it.</span></div>}</></div>}
-<section className="bottom-note"><div className="note-icon"><HandHeart size={20}/></div><div><b>Good things come back around.</b><p>Borrow something today. Lend something tomorrow.</p></div><span className="note-heart">✳</span><span className="note-mini">Made for campus, with care.</span></section></section></main>
-<footer><a className="brand footer-brand" href="#"><span className="brand-mark"><HandHeart size={15}/></span>borrowbuddy<span className="brand-dot">.</span></a><span>Made for campus life <span className="footer-heart">♥</span></span><span>{account?.campus||'Your campus'} · {new Date().getFullYear()}</span></footer>
-{modal&&typeof modal==='object'&&<div className="modal-backdrop" onClick={()=>setModal(null)}><div className="detail-modal" role="dialog" aria-modal="true" aria-label={modal.name} onClick={e=>e.stopPropagation()}><button type="button" className="close-modal" aria-label="Close" onClick={()=>setModal(null)}><X size={18}/></button><img src={modal.image} alt={modal.name}/><div className="detail-body"><span className="item-category">{modal.category}</span><h2>{modal.name}</h2><div className="detail-owner"><span className="owner-avatar">{modal.initials}</span><span><b>{modal.owner}</b><small>{modal.ratingCount>0?<><Star size={12} fill="currentColor"/> {modal.rating.toFixed(1)} · {modal.ratingCount} reviews</>:'New lender'}</small></span></div><p>{modal.description}</p><div className="detail-location"><MapPin size={15}/>{modal.distance}<span>·</span><CircleCheck size={15}/> {account?.campus}</div><label className="date-label">BORROW FROM<input type="date" value={requestStart} min={localDate()} onChange={e=>setRequestStart(e.target.value)}/></label><label className="date-label">RETURN BY<input type="date" value={requestEnd} min={requestStart||localDate()} onChange={e=>setRequestEnd(e.target.value)}/></label>{requestError&&<div className="auth-error" role="alert">{requestError}</div>}<button type="button" className="request-btn" disabled={actionBusy} onClick={()=>request(modal)}>{actionBusy?'Sending…':'Send borrow request'} <ArrowRight size={16}/></button><div className="detail-foot"><Check size={13}/> Always free. Return it in good shape.</div></div></div></div>}
-{modal===true&&<div className="modal-backdrop"><form className="create-modal" aria-label="Create a listing" onSubmit={createListing} onClick={e=>e.stopPropagation()}><button type="button" className="close-modal" onClick={()=>setModal(null)}><X size={18}/></button><span className="eyebrow muted">PASS IT AROUND</span><h2>Share something useful.</h2><p>It costs nothing to lend. It means a lot to borrow.</p><label>ITEM NAME<input name="name" placeholder="e.g. My spare graphing calculator" required/></label><label>CATEGORY<select name="category"><option>Electronics</option><option>Books</option><option>Study</option><option>Sports</option><option>Arts</option></select></label><label>A NOTE FOR BORROWERS<textarea name="description" maxLength={2000} placeholder="Anything they should know?" rows={3}/></label><label>IMAGE URL (HTTPS)<input name="imageUrl" type="url" maxLength={2048} placeholder="https://…"/></label><button className="request-btn" disabled={actionBusy}>{actionBusy?'Publishing…':'Publish listing'} <ArrowRight size={16}/></button></form></div>}
-{toast&&<div className="toast"><span>✳</span>{toast}</div>}
-</div>}
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { api, ApiError } from "./api";
+import {
+  Search,
+  Plus,
+  Grid2X2,
+  Package,
+  Clock3,
+  ArrowUpRight,
+  MapPin,
+  Star,
+  Check,
+  X,
+  Bell,
+  BookOpen,
+  Laptop,
+  Dumbbell,
+  Camera,
+  Sparkles,
+  Menu,
+  CalendarDays,
+  CircleCheck,
+  ArrowRight,
+  HandHeart,
+  Trash2,
+} from "lucide-react";
+type Listing = {
+  id: number;
+  name: string;
+  category: string;
+  owner: string;
+  initials: string;
+  rating: number;
+  ratingCount: number;
+  distance: string;
+  image: string;
+  price: string;
+  available: boolean;
+  description: string;
+};
+const cats = [
+  ["All items", Grid2X2],
+  ["Books", BookOpen],
+  ["Electronics", Laptop],
+  ["Study", Sparkles],
+  ["Sports", Dumbbell],
+  ["Arts & music", Camera],
+] as const;
+type Loan = {
+  id: number;
+  listingId: number;
+  listingTitle: string;
+  borrowerId: number;
+  borrowerName: string;
+  startDate: string;
+  returnDate: string;
+  status: string;
+  createdAt: string;
+};
+type ListingPage = {
+  content: any[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+type Notice = {
+  id: number;
+  message: string;
+  read: boolean;
+  createdAt: string;
+  loanRequestId: number | null;
+};
+const localDate = (plusDays = 0) => {
+  const d = new Date();
+  d.setDate(d.getDate() + plusDays);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+};
+const mapListing = (x: any): Listing => ({
+  id: x.id,
+  name: x.title,
+  category: x.category,
+  owner: x.ownerName,
+  initials: (x.ownerName || "")
+    .split(/\s+/)
+    .map((n: string) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase(),
+  rating: x.ownerRating ?? 0,
+  ratingCount: x.ratingCount ?? 0,
+  distance: x.campus || "Your campus",
+  image: x.imageUrl || "/item-placeholder.svg",
+  price: "Free to borrow",
+  available: x.status === "ACTIVE",
+  description: x.description,
+});
+const mapLoan = (x: any): Loan => ({
+  id: x.id,
+  listingId: x.listingId,
+  listingTitle: x.listingTitle,
+  borrowerId: x.borrowerId,
+  borrowerName: x.borrowerName,
+  startDate: x.startDate,
+  returnDate: x.returnDate,
+  status: x.status,
+  createdAt: x.createdAt,
+});
+export default function App() {
+  const [items, setItems] = useState<Listing[]>([]);
+  const [myListings, setMyListings] = useState<Listing[]>([]);
+  const [category, setCategory] = useState("All items");
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState("Discover");
+  const [modal, setModal] = useState<Listing | null | boolean>(null);
+  const [requests, setRequests] = useState<Loan[]>([]);
+  const [incoming, setIncoming] = useState<Loan[]>([]);
+  const [notifications, setNotifications] = useState<Notice[]>([]);
+  const [toast, setToast] = useState("");
+  const [mobile, setMobile] = useState(false);
+  const [authPage, setAuthPage] = useState(
+    location.pathname === "/login" || location.pathname === "/signup",
+  );
+  const [authMode, setAuthMode] = useState<"login" | "signup">(
+    location.pathname === "/signup" ? "signup" : "login",
+  );
+  const [returnTo, setReturnTo] = useState(
+    new URLSearchParams(location.search).get("returnTo") || "/",
+  );
+  const [sessionReady, setSessionReady] = useState(false);
+  const [account, setAccount] = useState<any>(null);
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authExpired, setAuthExpired] = useState(false);
+  const [requestStart, setRequestStart] = useState(localDate(1));
+  const [requestEnd, setRequestEnd] = useState(localDate(2));
+  const [requestError, setRequestError] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [dataError, setDataError] = useState("");
+  const [reloadListings, setReloadListings] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    api<any>("/auth/me")
+      .then((u) => {
+        if (!alive) return;
+        setAccount(u);
+        if (location.pathname === "/login" || location.pathname === "/signup")
+          setAuthPage(false);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setAccount(null);
+        setAuthPage(true);
+        setAuthMode(location.pathname === "/signup" ? "signup" : "login");
+        if (e instanceof ApiError && e.status !== 401) setAuthError(e.message);
+        if (location.pathname !== "/login" && location.pathname !== "/signup") {
+          setReturnTo("/");
+          history.replaceState(
+            {},
+            "",
+            `/login?returnTo=${encodeURIComponent("/")}`,
+          );
+        }
+      })
+      .finally(() => alive && setSessionReady(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    const expired = () => {
+      setAccount(null);
+      setAuthPage(true);
+      setAuthMode("login");
+      setAuthExpired(true);
+      history.replaceState(
+        {},
+        "",
+        `/login?returnTo=${encodeURIComponent(location.pathname)}`,
+      );
+    };
+    window.addEventListener("auth:expired", expired);
+    return () => window.removeEventListener("auth:expired", expired);
+  }, []);
+  useEffect(() => {
+    if (!account) return;
+    let alive = true;
+    Promise.all([
+      api<any[]>("/me/requests"),
+      api<any[]>("/me/listings"),
+      api<any[]>("/me/listings/requests"),
+      api<Notice[]>("/me/notifications"),
+    ])
+      .then(([reqs, own, incomingReqs, notices]) => {
+        if (!alive) return;
+        setRequests(reqs.map(mapLoan));
+        setMyListings(own.map(mapListing));
+        setIncoming(incomingReqs.map(mapLoan));
+        setNotifications(notices);
+      })
+      .catch(
+        (e) =>
+          alive &&
+          setDataError(
+            e instanceof Error ? e.message : "Unable to load your campus data.",
+          ),
+      )
+      .finally(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [account]);
+  useEffect(() => {
+    if (!account) return;
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => {
+      const p = new URLSearchParams({ page: "0", size: "50" });
+      if (query.trim()) p.set("q", query.trim());
+      if (category !== "All items")
+        for (const c of category === "Arts & music"
+          ? ["Arts", "Music"]
+          : [category]) {
+          const url = new URLSearchParams(p);
+          url.set("category", c);
+          api<ListingPage>(`/listings?${url.toString()}`, {
+            signal: ctrl.signal,
+          })
+            .then((r) =>
+              setItems((prev) => {
+                const fresh = r.content.map(mapListing);
+                return category === "Arts & music"
+                  ? Array.from(
+                      new Map(
+                        [
+                          ...prev.filter(
+                            (i) => !["Arts", "Music"].includes(i.category),
+                          ),
+                          ...fresh,
+                        ].map((i) => [i.id, i]),
+                      ).values(),
+                    )
+                  : fresh;
+              }),
+            )
+            .catch((e) => {
+              if (!ctrl.signal.aborted) setDataError(e.message);
+            });
+          return;
+        }
+      api<ListingPage>(`/listings?${p.toString()}`, { signal: ctrl.signal })
+        .then((r) => setItems(r.content.map(mapListing)))
+        .catch((e) => {
+          if (!ctrl.signal.aborted) setDataError(e.message);
+        });
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [account, query, category, reloadListings]);
+  function goAuth(destination: string) {
+    if (account) {
+      setTab(destination);
+      return;
+    }
+    setReturnTo(destination);
+    setAuthMode("login");
+    setAuthError("");
+    setAuthPage(true);
+    history.pushState(
+      {},
+      "",
+      `/login?returnTo=${encodeURIComponent(destination)}`,
+    );
+  }
+  async function submitAuth(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setAuthError("");
+    setAuthBusy(true);
+    const data = new FormData(e.currentTarget);
+    try {
+      if (authMode === "signup") {
+        await api("/auth/register", {
+          method: "POST",
+          body: JSON.stringify({
+            name: data.get("name"),
+            email: data.get("email"),
+            password: data.get("password"),
+            campus: data.get("campus"),
+          }),
+        });
+        setAuthMode("login");
+        history.replaceState(
+          {},
+          "",
+          `/login?returnTo=${encodeURIComponent(returnTo)}`,
+        );
+        setAuthError("Account created. Sign in to continue.");
+        return;
+      }
+      await api("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          email: String(data.get("email")),
+          password: String(data.get("password")),
+        }).toString(),
+      });
+      const me = await api<any>("/auth/me");
+      setAccount(me);
+      setAuthPage(false);
+      history.replaceState({}, "", "/");
+      const destination =
+        returnTo === "/" || returnTo === "/login" ? "Discover" : returnTo;
+      setTab(destination);
+    } catch (err) {
+      setAuthError(
+        err instanceof Error ? err.message : "Something went wrong. Try again.",
+      );
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+  async function logout() {
+    try {
+      await api("/auth/logout", { method: "POST" });
+      setAccount(null);
+      setSessionReady(true);
+      setAuthMode("login");
+      setAuthPage(true);
+      setRequests([]);
+      setIncoming([]);
+      history.replaceState({}, "", "/login");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not sign out");
+    }
+  }
+  function flash(s: string) {
+    setToast(s);
+    window.setTimeout(() => setToast(""), 3000);
+  }
+  function viewListing(item: Listing) {
+    setRequestStart(localDate(1));
+    setRequestEnd(localDate(2));
+    setRequestError("");
+    setModal(item);
+  }
+  async function request(item: Listing) {
+    if (!account) {
+      setModal(item);
+      goAuth("Discover");
+      return;
+    }
+    if (!requestStart || !requestEnd || requestEnd <= requestStart) {
+      setRequestError("Choose a return date after the start date.");
+      return;
+    }
+    setActionBusy(true);
+    setRequestError("");
+    try {
+      const savedReq = await api<any>(`/listings/${item.id}/requests`, {
+        method: "POST",
+        body: JSON.stringify({
+          startDate: requestStart,
+          returnDate: requestEnd,
+        }),
+      });
+      setRequests((prev) => [mapLoan(savedReq), ...prev]);
+      setModal(null);
+      flash("Borrow request sent.");
+    } catch (e) {
+      setRequestError(
+        e instanceof Error ? e.message : "Could not send your request.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+  async function createListing(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const body = {
+      title: String(f.get("name")).trim(),
+      category: String(f.get("category")),
+      description: String(
+        f.get("description") ||
+          "A useful item shared with the campus community.",
+      ).trim(),
+      imageUrl: String(f.get("imageUrl") || "").trim() || null,
+    };
+    if (!body.title) {
+      flash("Add an item name.");
+      return;
+    }
+    setActionBusy(true);
+    try {
+      const created = await api<any>("/listings", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const item = mapListing(created);
+      setMyListings((prev) => [item, ...prev]);
+      setModal(null);
+      setTab("My listings");
+      flash("Your listing is live.");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not publish listing.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+  async function deleteListing(item: Listing) {
+    setActionBusy(true);
+    try {
+      await api(`/listings/${item.id}`, { method: "DELETE" });
+      setMyListings((prev) => prev.filter((x) => x.id !== item.id));
+      setItems((prev) => prev.filter((x) => x.id !== item.id));
+      flash("Listing deleted.");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not delete listing.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+  async function decideLoan(id: number, approve: boolean) {
+    setActionBusy(true);
+    try {
+      const result = await api<any>(`/requests/${id}/decision`, {
+        method: "POST",
+        body: JSON.stringify({ approve }),
+      });
+      setIncoming((prev) =>
+        prev.map((x) => (x.id === id ? mapLoan(result) : x)),
+      );
+      flash(approve ? "Request approved." : "Request declined.");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not update request.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+  async function transitionLoan(id: number, status: string) {
+    setActionBusy(true);
+    try {
+      const result = await api<any>(`/requests/${id}/transition`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      });
+      const loan = mapLoan(result);
+      setIncoming((prev) => prev.map((x) => (x.id === id ? loan : x)));
+      setRequests((prev) => prev.map((x) => (x.id === id ? loan : x)));
+      flash("Loan status updated.");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not update loan.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+  async function cancelLoan(id: number) {
+    setActionBusy(true);
+    try {
+      await api(`/requests/${id}/cancel`, { method: "POST" });
+      setRequests((prev) =>
+        prev.map((x) => (x.id === id ? { ...x, status: "CANCELLED" } : x)),
+      );
+      flash("Request cancelled.");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not cancel request.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+  async function readAllNotifications() {
+    try {
+      await api("/me/notifications/read-all", { method: "POST" });
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not update notifications");
+    }
+  }
+  const filtered = useMemo(
+    () =>
+      items.filter(
+        (i) =>
+          (category === "All items" ||
+            (category === "Arts & music"
+              ? ["Arts", "Music"].includes(i.category)
+              : i.category === category)) &&
+          (i.name.toLowerCase().includes(query.toLowerCase()) ||
+            i.category.toLowerCase().includes(query.toLowerCase()) ||
+            i.owner.toLowerCase().includes(query.toLowerCase())),
+      ),
+    [items, category, query],
+  );
+  if (!sessionReady)
+    return (
+      <div className="auth-shell" role="status" aria-live="polite">
+        <span className="auth-caption">Preparing your campus community…</span>
+      </div>
+    );
+  if (!account || authPage)
+    return (
+      <main className="auth-shell">
+        <div className="auth-backdrop" aria-hidden="true">
+          <span className="auth-orbit" />
+          <span className="auth-orbit auth-orbit-b" />
+          <span className="auth-spark">✳</span>
+        </div>
+        <a
+          className="brand auth-brand"
+          href="/login"
+          onClick={(e) => {
+            e.preventDefault();
+            setAuthMode("login");
+          }}
+        >
+          <span className="brand-mark">
+            <HandHeart size={18} />
+          </span>
+          borrowbuddy<span className="brand-dot">.</span>
+        </a>
+        <section className="auth-card" aria-labelledby="auth-title">
+          <span className="eyebrow muted">YOUR CAMPUS, SHARED</span>
+          <h1 id="auth-title">
+            {authMode === "login"
+              ? "Good to have you back."
+              : "Make room to share."}
+          </h1>
+          <p>
+            {authMode === "login"
+              ? "Sign in to find what you need and share what you have."
+              : "Join your campus community and start borrowing."}
+          </p>
+          {authExpired && (
+            <div className="auth-error" role="alert">
+              Your session expired. Please sign in again.
+            </div>
+          )}
+          {authError && (
+            <div
+              className={
+                authError === "Account created. Sign in to continue."
+                  ? "auth-success"
+                  : "auth-error"
+              }
+              role="alert"
+            >
+              {authError}
+            </div>
+          )}
+          <form onSubmit={submitAuth}>
+            {authMode === "signup" && (
+              <label>
+                YOUR NAME
+                <input
+                  name="name"
+                  autoComplete="name"
+                  maxLength={120}
+                  required
+                />
+              </label>
+            )}
+            <label>
+              EMAIL ADDRESS
+              <input
+                name="email"
+                type="email"
+                autoComplete={authMode === "login" ? "username" : "email"}
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={255}
+                required
+              />
+            </label>
+            {authMode === "signup" && (
+              <label>
+                CAMPUS
+                <input
+                  name="campus"
+                  autoComplete="organization"
+                  maxLength={180}
+                  required
+                />
+              </label>
+            )}
+            <label>
+              PASSWORD
+              <input
+                name="password"
+                type="password"
+                autoComplete={
+                  authMode === "login" ? "current-password" : "new-password"
+                }
+                minLength={authMode === "signup" ? 12 : undefined}
+                maxLength={72}
+                required
+              />
+            </label>
+            <button className="request-btn" type="submit" disabled={authBusy}>
+              {authBusy
+                ? authMode === "login"
+                  ? "Signing in…"
+                  : "Creating account…"
+                : authMode === "login"
+                  ? "Sign in"
+                  : "Create account"}{" "}
+              <ArrowRight size={16} />
+            </button>
+          </form>
+          <p className="auth-switch">
+            {authMode === "login"
+              ? "New to BorrowBuddy?"
+              : "Already have an account?"}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                const next = authMode === "login" ? "signup" : "login";
+                setAuthMode(next);
+                setAuthError("");
+                setAuthExpired(false);
+                history.replaceState(
+                  {},
+                  "",
+                  `/${next}?returnTo=${encodeURIComponent(returnTo)}`,
+                );
+              }}
+            >
+              {authMode === "login" ? "Create an account" : "Sign in"}
+            </button>
+          </p>
+        </section>
+        <span className="auth-caption">A little give. A lot of get.</span>
+      </main>
+    );
+  return (
+    <div className="app">
+      <header className="topbar">
+        <a className="brand" href="#">
+          <span className="brand-mark">
+            <HandHeart size={18} />
+          </span>
+          borrowbuddy<span className="brand-dot">.</span>
+        </a>
+        <nav className="topnav" aria-label="Main navigation">
+          <button
+            className={tab === "Discover" ? "nav-active" : ""}
+            onClick={() => setTab("Discover")}
+          >
+            Discover
+          </button>
+          <button
+            className={tab === "My loans" ? "nav-active" : ""}
+            onClick={() => goAuth("My loans")}
+          >
+            My loans {requests.length > 0 && <i>{requests.length}</i>}
+          </button>
+          <button
+            className={tab === "My listings" ? "nav-active" : ""}
+            onClick={() => goAuth("My listings")}
+          >
+            My listings
+          </button>
+        </nav>
+        <div className="top-actions">
+          <button
+            className="icon-btn notification"
+            onClick={() => goAuth("Notifications")}
+            aria-label={`Notifications${notifications.filter((n) => !n.read).length ? `, ${notifications.filter((n) => !n.read).length} unread` : ""}`}
+          >
+            <Bell size={18} />
+            {notifications.some((n) => !n.read) && <b />}
+          </button>
+          <button
+            className="avatar me"
+            onClick={logout}
+            aria-label="Sign out"
+            title={`Sign out ${account?.name || ""}`}
+          >
+            {account?.name?.[0]?.toUpperCase() || "A"}
+          </button>
+          <button
+            className="mobile-menu icon-btn"
+            onClick={() => setMobile(!mobile)}
+            aria-label="Toggle navigation"
+            aria-expanded={mobile}
+            aria-controls="mobile-nav"
+          >
+            <Menu size={20} />
+          </button>
+        </div>
+      </header>
+      {mobile && (
+        <div className="mobile-nav" id="mobile-nav">
+          {["Discover", "My loans", "My listings"].map((t) => (
+            <button
+              key={t}
+              onClick={() => {
+                t === "Discover" ? setTab(t) : goAuth(t);
+                setMobile(false);
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+      <main>
+        <section className="welcome">
+          <div>
+            <div className="eyebrow">
+              <span /> YOUR CAMPUS, SHARED
+            </div>
+            <h1>
+              Good things
+              <br />
+              go <em>around.</em>
+            </h1>
+            <p>
+              A camera, a calculator, a good book.
+              <br />
+              Borrow what you need, lend what you love.
+            </p>
+            <div className="welcome-meta">
+              <span className="meta-community">
+                <HandHeart size={15} /> Open to your campus community
+              </span>
+              <span className="meta-divider" />
+              <MapPin size={14} />
+              <strong> {account?.campus || "Your campus"}</strong>
+            </div>
+          </div>
+          <div className="hero-art">
+            <div className="hero-glow" />
+            <div className="orbit orbit-one" />
+            <div className="orbit orbit-two" />
+            <div className="hero-circle">
+              <span className="sun">✳</span>
+              <div className="hero-note">
+                A little give.
+                <br />
+                <b>A lot of get.</b>
+              </div>
+              <span className="hero-book">📚</span>
+              <span className="hero-coffee">☕</span>
+              <span className="hero-plant">🌱</span>
+              <div className="hero-caption">
+                SOMEONE NEAR YOU
+                <br />
+                HAS WHAT YOU NEED.
+              </div>
+            </div>
+            <span className="floating f1">♡</span>
+            <span className="floating f2">✳</span>
+          </div>
+        </section>
+        <section className="content-area">
+          <div className="section-heading">
+            <div>
+              <div className="eyebrow muted">THE GOOD STUFF</div>
+              <h2>
+                {tab === "Discover" ? "Find your next " : "Your "}
+                {tab === "Discover" && <em>borrow.</em>}
+                {tab === "My loans" && "loans."}
+                {tab === "My listings" && "listings."}
+                {tab === "Notifications" && "notifications."}
+              </h2>
+            </div>
+            {tab === "My listings" && (
+              <button className="list-item-btn" onClick={() => setModal(true)}>
+                <Plus size={16} /> List an item
+              </button>
+            )}
+          </div>
+          {tab !== "My loans" &&
+            tab !== "My listings" &&
+            tab !== "Notifications" && (
+              <>
+                <div className="toolbar">
+                  <div className="searchbox">
+                    <Search size={18} />
+                    <input
+                      type="search"
+                      enterKeyHint="search"
+                      aria-label="Search listings"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search for anything…"
+                    />
+                  </div>
+                </div>
+                <div className="category-row">
+                  {cats.map(([name, Icon]) => (
+                    <button
+                      key={name}
+                      aria-pressed={category === name}
+                      onClick={() => setCategory(name)}
+                      className={
+                        "category-chip " + (category === name ? "selected" : "")
+                      }
+                    >
+                      <Icon size={15} />
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                <div className="results-line" aria-live="polite">
+                  <span>{filtered.length} things to borrow</span>
+                  <span>
+                    All items are <b>free</b> to borrow{" "}
+                    <span className="tiny-spark">✳</span>
+                  </span>
+                </div>
+                <div className="listing-grid">
+                  {filtered.map((item, n) => (
+                    <article
+                      className="item-card"
+                      style={{ animationDelay: `${n * 55}ms` }}
+                      key={item.id}
+                    >
+                      <button
+                        className="item-image"
+                        onClick={() => viewListing(item)}
+                      >
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          width="800"
+                          height="600"
+                          loading="lazy"
+                          decoding="async"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const fallback = /tennis|racket/i.test(item.name)
+                              ? "/tennis-racket.svg"
+                              : "/item-placeholder.svg";
+                            if (
+                              e.currentTarget.src !==
+                              new URL(fallback, location.href).href
+                            )
+                              e.currentTarget.src = fallback;
+                          }}
+                        />
+                        <span className="available-pill">
+                          <i /> Available
+                        </span>
+                      </button>
+                      <div className="item-info">
+                        <div className="item-top">
+                          <span className="item-category">{item.category}</span>
+                          <span className="rating">
+                            {item.ratingCount > 0 ? (
+                              <>
+                                <Star size={12} fill="currentColor" />
+                                {item.rating.toFixed(1)} · {item.ratingCount}
+                              </>
+                            ) : (
+                              "New"
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          className="item-name"
+                          onClick={() => viewListing(item)}
+                        >
+                          {item.name}
+                        </button>
+                        <div className="owner-row">
+                          <span className="owner-avatar">{item.initials}</span>
+                          <span>
+                            Lent by <b>{item.owner}</b>
+                          </span>
+                          <span className="distance">
+                            <MapPin size={12} />
+                            {item.distance}
+                          </span>
+                        </div>
+                        <div className="item-bottom">
+                          <span className="free-label">
+                            <span>↗</span> Free to borrow
+                          </span>
+                          <button
+                            className="arrow-btn"
+                            onClick={() => viewListing(item)}
+                            aria-label={`View ${item.name}`}
+                          >
+                            <ArrowUpRight size={17} />
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                {dataError && (
+                  <div className="auth-error" role="alert">
+                    {dataError}{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDataError("");
+                        setReloadListings((n) => n + 1);
+                      }}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {filtered.length === 0 && (
+                  <div className="empty-state">
+                    <Package size={28} />
+                    <b>Nothing here just yet</b>
+                    <span>
+                      Try another search or explore a different category.
+                    </span>
+                  </div>
+                )}
+                <div className="see-more">
+                  <span />
+                  <button disabled>
+                    THAT’S EVERYTHING FOR NOW <span aria-hidden="true">✳</span>
+                  </button>
+                  <span />
+                </div>
+              </>
+            )}
+          {tab === "My loans" && (
+            <div className="loans-panel">
+              <div className="panel-head">
+                <div>
+                  <span className="eyebrow muted">YOUR BORROWING HISTORY</span>
+                  <h3>Things in motion.</h3>
+                </div>
+                <span className="panel-count">{requests.length} requests</span>
+              </div>
+              {requests.length ? (
+                requests.map((loan) => (
+                  <div className="loan-row" key={loan.id}>
+                    <div className="loan-icon">
+                      <Package size={18} />
+                    </div>
+                    <div className="loan-name">
+                      <b>{loan.listingTitle}</b>
+                      <span>
+                        {loan.startDate} → {loan.returnDate} ·{" "}
+                        {loan.status.toLowerCase()}
+                      </span>
+                    </div>
+                    <span className="status-pending">
+                      <i />
+                      {loan.status}
+                    </span>
+                    {["REQUESTED", "APPROVED"].includes(loan.status) && (
+                      <button
+                        className="small-action"
+                        disabled={actionBusy}
+                        onClick={() => cancelLoan(loan.id)}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <CalendarDays size={17} className="loan-calendar" />
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">
+                  <Clock3 size={28} />
+                  <b>No loans yet</b>
+                  <span>
+                    Find something you love and send a borrow request.
+                  </span>
+                  <button onClick={() => setTab("Discover")}>
+                    Explore items <ArrowRight size={15} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {tab === "Notifications" && (
+            <div className="loans-panel">
+              <div className="panel-head">
+                <div>
+                  <span className="eyebrow muted">YOUR UPDATES</span>
+                  <h3>Good news, when it comes.</h3>
+                </div>
+                {notifications.some((n) => !n.read) && (
+                  <button
+                    className="small-action"
+                    onClick={readAllNotifications}
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+              {notifications.length ? (
+                notifications.map((n) => (
+                  <div className="loan-row" key={n.id}>
+                    <div className="loan-icon">
+                      <Bell size={18} />
+                    </div>
+                    <div className="loan-name">
+                      <b>{n.message}</b>
+                      <span>{new Date(n.createdAt).toLocaleString()}</span>
+                    </div>
+                    {!n.read && <span className="available-pill">New</span>}
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">
+                  <Bell size={28} />
+                  <b>You’re all caught up</b>
+                  <span>
+                    Borrow requests and return reminders will show up here.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          {tab === "My listings" && (
+            <div className="loans-panel">
+              <div className="panel-head">
+                <div>
+                  <span className="eyebrow muted">SHARE A LITTLE</span>
+                  <h3>Your contributions.</h3>
+                </div>
+              </div>
+              <>
+                {myListings.map((item) => (
+                  <div className="loan-row" key={item.id}>
+                    <div className="loan-icon">
+                      <Package size={18} />
+                    </div>
+                    <div className="loan-name">
+                      <b>{item.name}</b>
+                      <span>
+                        {item.category} ·{" "}
+                        {item.available ? "Active" : "Unavailable"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="small-action danger-action"
+                      disabled={actionBusy}
+                      onClick={() => deleteListing(item)}
+                      aria-label={`Delete ${item.name}`}
+                    >
+                      <Trash2 size={15} /> Delete
+                    </button>
+                  </div>
+                ))}
+                {incoming.length > 0 && (
+                  <>
+                    <div className="panel-head">
+                      <div>
+                        <span className="eyebrow muted">BORROW REQUESTS</span>
+                        <h3>Requests for your items.</h3>
+                      </div>
+                    </div>
+                    {incoming.map((r) => (
+                      <div className="loan-row" key={r.id}>
+                        <div className="loan-name">
+                          <b>
+                            {r.listingTitle} · {r.borrowerName}
+                          </b>
+                          <span>
+                            {r.startDate} → {r.returnDate} · {r.status}
+                          </span>
+                        </div>
+                        {r.status === "REQUESTED" ? (
+                          <>
+                            <button
+                              className="small-action"
+                              disabled={actionBusy}
+                              onClick={() => decideLoan(r.id, true)}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              className="small-action"
+                              disabled={actionBusy}
+                              onClick={() => decideLoan(r.id, false)}
+                            >
+                              Decline
+                            </button>
+                          </>
+                        ) : r.status === "APPROVED" ? (
+                          <button
+                            className="small-action"
+                            disabled={actionBusy}
+                            onClick={() => transitionLoan(r.id, "BORROWED")}
+                          >
+                            Confirm handover
+                          </button>
+                        ) : r.status === "BORROWED" ? (
+                          <button
+                            className="small-action"
+                            disabled={actionBusy}
+                            onClick={() => transitionLoan(r.id, "RETURNED")}
+                          >
+                            Confirm return
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </>
+                )}
+                {!myListings.length && !incoming.length && (
+                  <div className="empty-state">
+                    <HandHeart size={28} />
+                    <b>Nothing listed yet</b>
+                    <span>
+                      Got something useful sitting around? Someone nearby could
+                      use it.
+                    </span>
+                  </div>
+                )}
+              </>
+            </div>
+          )}
+          <section className="bottom-note">
+            <div className="note-icon">
+              <HandHeart size={20} />
+            </div>
+            <div>
+              <b>Good things come back around.</b>
+              <p>Borrow something today. Lend something tomorrow.</p>
+            </div>
+            <span className="note-heart">✳</span>
+            <span className="note-mini">Made for campus, with care.</span>
+          </section>
+        </section>
+      </main>
+      <footer>
+        <a className="brand footer-brand" href="#">
+          <span className="brand-mark">
+            <HandHeart size={15} />
+          </span>
+          borrowbuddy<span className="brand-dot">.</span>
+        </a>
+        <span>
+          Made for campus life <span className="footer-heart">♥</span>
+        </span>
+        <span>
+          {account?.campus || "Your campus"} · {new Date().getFullYear()}
+        </span>
+      </footer>
+      {modal && typeof modal === "object" && (
+        <div className="modal-backdrop" onClick={() => setModal(null)}>
+          <div
+            className="detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={modal.name}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="close-modal"
+              aria-label="Close"
+              onClick={() => setModal(null)}
+            >
+              <X size={18} />
+            </button>
+            <img src={modal.image} alt={modal.name} />
+            <div className="detail-body">
+              <span className="item-category">{modal.category}</span>
+              <h2>{modal.name}</h2>
+              <div className="detail-owner">
+                <span className="owner-avatar">{modal.initials}</span>
+                <span>
+                  <b>{modal.owner}</b>
+                  <small>
+                    {modal.ratingCount > 0 ? (
+                      <>
+                        <Star size={12} fill="currentColor" />{" "}
+                        {modal.rating.toFixed(1)} · {modal.ratingCount} reviews
+                      </>
+                    ) : (
+                      "New lender"
+                    )}
+                  </small>
+                </span>
+              </div>
+              <p>{modal.description}</p>
+              <div className="detail-location">
+                <MapPin size={15} />
+                {modal.distance}
+                <span>·</span>
+                <CircleCheck size={15} /> {account?.campus}
+              </div>
+              <label className="date-label">
+                BORROW FROM
+                <input
+                  type="date"
+                  value={requestStart}
+                  min={localDate()}
+                  onChange={(e) => setRequestStart(e.target.value)}
+                />
+              </label>
+              <label className="date-label">
+                RETURN BY
+                <input
+                  type="date"
+                  value={requestEnd}
+                  min={requestStart || localDate()}
+                  onChange={(e) => setRequestEnd(e.target.value)}
+                />
+              </label>
+              {requestError && (
+                <div className="auth-error" role="alert">
+                  {requestError}
+                </div>
+              )}
+              <button
+                type="button"
+                className="request-btn"
+                disabled={actionBusy}
+                onClick={() => request(modal)}
+              >
+                {actionBusy ? "Sending…" : "Send borrow request"}{" "}
+                <ArrowRight size={16} />
+              </button>
+              <div className="detail-foot">
+                <Check size={13} /> Always free. Return it in good shape.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {modal === true && (
+        <div className="modal-backdrop">
+          <form
+            className="create-modal"
+            aria-label="Create a listing"
+            onSubmit={createListing}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="close-modal"
+              onClick={() => setModal(null)}
+            >
+              <X size={18} />
+            </button>
+            <span className="eyebrow muted">PASS IT AROUND</span>
+            <h2>Share something useful.</h2>
+            <p>It costs nothing to lend. It means a lot to borrow.</p>
+            <label>
+              ITEM NAME
+              <input
+                name="name"
+                placeholder="e.g. My spare graphing calculator"
+                required
+              />
+            </label>
+            <label>
+              CATEGORY
+              <select name="category">
+                <option>Electronics</option>
+                <option>Books</option>
+                <option>Study</option>
+                <option>Sports</option>
+                <option>Arts</option>
+              </select>
+            </label>
+            <label>
+              A NOTE FOR BORROWERS
+              <textarea
+                name="description"
+                maxLength={2000}
+                placeholder="Anything they should know?"
+                rows={3}
+              />
+            </label>
+            <label>
+              IMAGE URL (HTTPS)
+              <input
+                name="imageUrl"
+                type="url"
+                maxLength={2048}
+                placeholder="https://…"
+              />
+            </label>
+            <button className="request-btn" disabled={actionBusy}>
+              {actionBusy ? "Publishing…" : "Publish listing"}{" "}
+              <ArrowRight size={16} />
+            </button>
+          </form>
+        </div>
+      )}
+      {toast && (
+        <div className="toast">
+          <span>✳</span>
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
