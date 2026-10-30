@@ -1,63 +1,7 @@
-CREATE TABLE users (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(120) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    campus VARCHAR(180) NOT NULL,
-    reputation NUMERIC(3, 2) NOT NULL DEFAULT 5.0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE listings (
-    id BIGSERIAL PRIMARY KEY,
-    owner_id BIGINT NOT NULL REFERENCES users (id),
-    title VARCHAR(180) NOT NULL,
-    description TEXT NOT NULL,
-    category VARCHAR(80) NOT NULL,
-    image_url TEXT,
-    available BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_listings_category ON listings (category);
-CREATE INDEX idx_listings_available ON listings (available);
-
-CREATE TABLE loan_requests (
-    id BIGSERIAL PRIMARY KEY,
-    listing_id BIGINT NOT NULL REFERENCES listings (id),
-    borrower_id BIGINT NOT NULL REFERENCES users (id),
-    start_date DATE NOT NULL,
-    return_date DATE NOT NULL,
-    status VARCHAR(24) NOT NULL DEFAULT 'REQUESTED'
-        CHECK (
-            status IN (
-                'REQUESTED',
-                'APPROVED',
-                'REJECTED',
-                'BORROWED',
-                'RETURNED'
-            )
-        ),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK (return_date > start_date)
-);
-
-CREATE INDEX idx_loan_listing_status ON loan_requests (listing_id, status);
-
-CREATE TABLE reviews (
-    id BIGSERIAL PRIMARY KEY,
-    loan_request_id BIGINT NOT NULL UNIQUE REFERENCES loan_requests (id),
-    reviewer_id BIGINT NOT NULL REFERENCES users (id),
-    reviewee_id BIGINT NOT NULL REFERENCES users (id),
-    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
-    comment TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE notifications (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users (id),
-    loan_request_id BIGINT REFERENCES loan_requests (id),
-    message TEXT NOT NULL,
-    read BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+CREATE TABLE users (id BIGSERIAL PRIMARY KEY, name VARCHAR(120) NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, campus VARCHAR(180) NOT NULL, reputation NUMERIC(3,2) NOT NULL DEFAULT 5.0, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE listings (id BIGSERIAL PRIMARY KEY, owner_id BIGINT NOT NULL REFERENCES users(id), title VARCHAR(180) NOT NULL, description TEXT NOT NULL, category VARCHAR(80) NOT NULL, image_url TEXT, available BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX idx_listings_category ON listings(category); CREATE INDEX idx_listings_available ON listings(available);
+CREATE TABLE loan_requests (id BIGSERIAL PRIMARY KEY, listing_id BIGINT NOT NULL REFERENCES listings(id), borrower_id BIGINT NOT NULL REFERENCES users(id), start_date DATE NOT NULL, return_date DATE NOT NULL, status VARCHAR(24) NOT NULL DEFAULT 'REQUESTED' CHECK (status IN ('REQUESTED','APPROVED','REJECTED','BORROWED','RETURNED')), created_at TIMESTAMPTZ NOT NULL DEFAULT now(), CHECK(return_date > start_date));
+CREATE INDEX idx_loan_listing_status ON loan_requests(listing_id,status);
+CREATE TABLE reviews (id BIGSERIAL PRIMARY KEY, loan_request_id BIGINT NOT NULL UNIQUE REFERENCES loan_requests(id), reviewer_id BIGINT NOT NULL REFERENCES users(id), reviewee_id BIGINT NOT NULL REFERENCES users(id), rating INT NOT NULL CHECK(rating BETWEEN 1 AND 5), comment TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE notifications (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id), loan_request_id BIGINT REFERENCES loan_requests(id), message TEXT NOT NULL, read BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
