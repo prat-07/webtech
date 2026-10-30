@@ -32,7 +32,7 @@ public class ApiController {
     @GetMapping("/listings") @Transactional(readOnly=true)
     public PageResponse<ApiModels.ListingResponse> search(@AuthenticationPrincipal CampusPrincipal user,@RequestParam(required=false)String q,@RequestParam(required=false)String category,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="24")int size){
         if(category!=null&&!category.isBlank()&&!CATEGORIES.contains(category))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unknown category");
-        int safePage=Math.max(0,page),safeSize=Math.min(50,Math.max(1,size));Page<Listing> result=listings.findAll(ListingSpecs.search(q,category,user.campus()),PageRequest.of(safePage,safeSize,Sort.by(Sort.Order.desc("createdAt"),Sort.Order.desc("id"))));
+        int safePage=Math.max(0,page),safeSize=Math.min(50,Math.max(1,size));Page<Listing> result=listings.findAll(ListingSpecs.search(q,category,user.campus(),user.id()),PageRequest.of(safePage,safeSize,Sort.by(Sort.Order.desc("createdAt"),Sort.Order.desc("id"))));
         return new PageResponse<>(result.map(this::listingResponse).getContent(),result.getNumber(),result.getSize(),result.getTotalElements(),result.getTotalPages());
     }
     @GetMapping("/listings/{id}") @Transactional(readOnly=true)
